@@ -2,97 +2,140 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Lyrics Finder</title>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --bg: #f2f2f2;
+      --text: #222;
+      --card: #fff;
+      --accent: #007bff;
+    }
+    [data-theme="dark"] {
+      --bg: #1f1f1f;
+      --text: #f0f0f0;
+      --card: #2e2e2e;
+      --accent: #0a84ff;
+    }
     body {
       font-family: 'Poppins', sans-serif;
-      background: #f2f2f2;
       margin: 0;
       padding: 2rem;
+      background: var(--bg);
+      color: var(--text);
+      transition: all 0.3s ease;
     }
     .container {
-      max-width: 600px;
+      max-width: 700px;
       margin: auto;
-      background: #fff;
+      background: var(--card);
       padding: 2rem;
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
     h1 {
       text-align: center;
-      margin-bottom: 2rem;
-      color: #333;
     }
-    input {
+    input, button {
       width: 100%;
       padding: 12px;
       margin: 0.5rem 0;
-      border: 1px solid #ccc;
-      border-radius: 6px;
       font-size: 16px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
     }
     button {
-      width: 100%;
-      padding: 12px;
-      background: #007bff;
+      background: var(--accent);
       color: white;
-      font-size: 16px;
       border: none;
-      border-radius: 6px;
       cursor: pointer;
-      transition: 0.3s;
     }
     button:hover {
-      background: #0056b3;
+      opacity: 0.9;
     }
-    .error {
-      color: red;
-      margin: 1rem 0;
+    .error, .success {
       text-align: center;
+      margin-top: 1rem;
+      color: red;
     }
     .lyrics {
       white-space: pre-wrap;
-      background: #f9f9f9;
+      background: #eee;
       padding: 1rem;
       border-radius: 6px;
       margin-top: 1rem;
     }
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 1rem;
+    }
+    .controls button {
+      flex: 1;
+    }
     .loading {
+      display: none;
       text-align: center;
       margin-top: 1rem;
     }
-    .history {
+    .spinner {
+      border: 4px solid #ccc;
+      border-top: 4px solid var(--accent);
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      animation: spin 1s linear infinite;
+      margin: auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .theme-toggle {
+      text-align: right;
+      margin-bottom: 1rem;
+    }
+    .history, .favorites {
       margin-top: 2rem;
     }
-    .history h3 {
-      margin-bottom: 0.5rem;
-    }
-    .history ul {
-      list-style: none;
-      padding: 0;
-    }
-    .history li {
+    li {
       cursor: pointer;
-      color: #007bff;
+      color: var(--accent);
       text-decoration: underline;
-      margin-bottom: 0.3rem;
     }
   </style>
 </head>
-<body>
+<body data-theme="light">
   <div class="container">
+    <div class="theme-toggle">
+      <button onclick="toggleTheme()">🌓 Toggle Theme</button>
+    </div>
     <h1>🎶 Lyrics Finder</h1>
     <input type="text" id="artist" placeholder="Artist name" />
     <input type="text" id="title" placeholder="Song title" />
     <button onclick="getLyrics()">Get Lyrics</button>
     <div class="error" id="error"></div>
-    <div class="loading" id="loading" style="display:none">🔄 Loading...</div>
+    <div class="loading" id="loading"><div class="spinner"></div></div>
     <div class="lyrics" id="result"></div>
-    <div class="history" id="historySection" style="display:none">
-      <h3>Recent Searches</h3>
+
+    <div class="controls" id="lyricsControls" style="display:none">
+      <button onclick="copyLyrics()">✂️ Copy</button>
+      <button onclick="shareLyrics()">🔗 Share</button>
+      <button onclick="addFavorite()">⭐ Add to Favorites</button>
+    </div>
+
+    <div class="history" id="historySection">
+      <h3>🔁 Recent Searches</h3>
       <ul id="historyList"></ul>
+      <button onclick="clearHistory()">Clear History</button>
+    </div>
+
+    <div class="favorites" id="favoritesSection">
+      <h3>⭐ Favorites</h3>
+      <ul id="favoritesList"></ul>
+      <button onclick="clearFavorites()">Clear Favorites</button>
     </div>
   </div>
 
@@ -101,73 +144,131 @@
     const titleInput = document.getElementById('title');
     const resultDiv = document.getElementById('result');
     const errorDiv = document.getElementById('error');
-    const loadingDiv = document.getElementById('loading');
-    const historyList = document.getElementById('historyList');
-    const historySection = document.getElementById('historySection');
+    const loading = document.getElementById('loading');
+    const controls = document.getElementById('lyricsControls');
 
-    function getLyrics(artistOverride = null, titleOverride = null) {
-      const artist = artistOverride || artistInput.value.trim();
-      const title = titleOverride || titleInput.value.trim();
-
+    function getLyrics(overrideArtist = null, overrideTitle = null) {
+      const artist = overrideArtist || artistInput.value.trim();
+      const title = overrideTitle || titleInput.value.trim();
+      const key = `${artist} - ${title}`;
       errorDiv.innerText = '';
       resultDiv.innerText = '';
+      controls.style.display = 'none';
+
       if (!artist || !title) {
         errorDiv.innerText = 'Please fill in both fields.';
         return;
       }
 
-      loadingDiv.style.display = 'block';
+      const suggestions = {"Adell": "Adele", "The Beetles": "The Beatles"};
+      if (suggestions[artist]) {
+        errorDiv.innerText = `Did you mean "${suggestions[artist]}"?`;
+      }
 
+      loading.style.display = 'block';
       fetch(`https://api.lyrics.ovh/v1/${artist}/${title}`)
         .then(res => res.json())
         .then(data => {
-          loadingDiv.style.display = 'none';
+          loading.style.display = 'none';
           if (data.lyrics) {
             resultDiv.innerText = data.lyrics;
-            saveToHistory(artist, title);
+            controls.style.display = 'flex';
+            saveHistory(key);
           } else {
-            resultDiv.innerText = '';
-            errorDiv.innerText = 'Lyrics not found. 😢';
+            errorDiv.innerText = 'Lyrics not found.';
           }
         })
         .catch(() => {
-          loadingDiv.style.display = 'none';
-          errorDiv.innerText = 'An error occurred while fetching lyrics.';
+          loading.style.display = 'none';
+          errorDiv.innerText = 'Error fetching lyrics.';
         });
     }
 
-    function saveToHistory(artist, title) {
-      const key = `${artist} - ${title}`;
+    function saveHistory(key) {
       let history = JSON.parse(localStorage.getItem('lyricsHistory') || '[]');
-      history = history.filter(item => item !== key); // Avoid duplicates
-      history.unshift(key); // Add to top
-      if (history.length > 5) history = history.slice(0, 5); // Max 5 items
+      history = history.filter(item => item !== key);
+      history.unshift(`${key} (${new Date().toLocaleString()})`);
+      if (history.length > 5) history = history.slice(0, 5);
       localStorage.setItem('lyricsHistory', JSON.stringify(history));
       showHistory();
     }
 
     function showHistory() {
+      const list = document.getElementById('historyList');
       const history = JSON.parse(localStorage.getItem('lyricsHistory') || '[]');
-      if (history.length === 0) {
-        historySection.style.display = 'none';
-        return;
-      }
-      historySection.style.display = 'block';
-      historyList.innerHTML = '';
+      list.innerHTML = '';
       history.forEach(item => {
         const li = document.createElement('li');
         li.textContent = item;
         li.onclick = () => {
-          const [artist, title] = item.split(' - ');
+          const [key] = item.split(' (');
+          const [artist, title] = key.split(' - ');
           artistInput.value = artist;
           titleInput.value = title;
           getLyrics(artist, title);
         };
-        historyList.appendChild(li);
+        list.appendChild(li);
       });
     }
 
-    showHistory(); // Load on page load
+    function clearHistory() {
+      localStorage.removeItem('lyricsHistory');
+      showHistory();
+    }
+
+    function copyLyrics() {
+      navigator.clipboard.writeText(resultDiv.innerText);
+      alert('Lyrics copied!');
+    }
+
+    function shareLyrics() {
+      const text = encodeURIComponent(resultDiv.innerText.substring(0, 200) + '...');
+      const url = `https://twitter.com/intent/tweet?text=${text}`;
+      window.open(url, '_blank');
+    }
+
+    function toggleTheme() {
+      const body = document.body;
+      const theme = body.getAttribute('data-theme');
+      body.setAttribute('data-theme', theme === 'dark' ? 'light' : 'dark');
+    }
+
+    function addFavorite() {
+      const artist = artistInput.value.trim();
+      const title = titleInput.value.trim();
+      const key = `${artist} - ${title}`;
+      let favorites = JSON.parse(localStorage.getItem('lyricsFavorites') || '[]');
+      if (!favorites.includes(key)) {
+        favorites.unshift(key);
+        localStorage.setItem('lyricsFavorites', JSON.stringify(favorites));
+        showFavorites();
+      }
+    }
+
+    function showFavorites() {
+      const list = document.getElementById('favoritesList');
+      const favorites = JSON.parse(localStorage.getItem('lyricsFavorites') || '[]');
+      list.innerHTML = '';
+      favorites.forEach(key => {
+        const li = document.createElement('li');
+        li.textContent = key;
+        li.onclick = () => {
+          const [artist, title] = key.split(' - ');
+          artistInput.value = artist;
+          titleInput.value = title;
+          getLyrics(artist, title);
+        };
+        list.appendChild(li);
+      });
+    }
+
+    function clearFavorites() {
+      localStorage.removeItem('lyricsFavorites');
+      showFavorites();
+    }
+
+    showHistory();
+    showFavorites();
   </script>
 </body>
 </html>
